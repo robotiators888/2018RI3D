@@ -10,6 +10,8 @@
 package org.usfirst.frc.team888.robot;
 
 import edu.wpi.first.wpilibj.IterativeRobot;
+import edu.wpi.first.wpilibj.Joystick;
+import edu.wpi.first.wpilibj.Victor;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
@@ -26,6 +28,14 @@ public class Robot extends IterativeRobot {
 	private String m_autoSelected;
 	private SendableChooser<String> m_chooser = new SendableChooser<>();
 
+	Victor rearLeft = new Victor(7);
+	Victor rearRight = new Victor(6);
+	Victor frontLeft = new Victor(9);
+	Victor frontRight = new Victor(8);
+	
+	Joystick leftStick = new Joystick(0); // set to ID 1 in DriverStation
+	Joystick rightStick = new Joystick(1); // set to ID 2 in DriverStation
+	
 	/**
 	 * This function is run when the robot is first started up and should be
 	 * used for any initialization code.
@@ -77,6 +87,19 @@ public class Robot extends IterativeRobot {
 	 */
 	@Override
 	public void teleopPeriodic() {
+		
+		double leftStickValue = -leftStick.getRawAxis(1);
+		double rightStickValue = rightStick.getRawAxis(1);
+		
+		if (!leftStick.getRawButton(1) && !rightStick.getRawButton(1)) {
+			leftStickValue *= 0.7;
+			rightStickValue *= 0.7;
+		}
+
+		rearLeft.set(leftStickValue);
+		frontLeft.set(leftStickValue);
+		rearRight.set(rightStickValue);
+		frontRight.set(rightStickValue);
 	}
 
 	/**
