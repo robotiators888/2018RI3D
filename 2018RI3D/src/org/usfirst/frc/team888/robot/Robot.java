@@ -48,6 +48,8 @@ public class Robot extends IterativeRobot {
 
 	private boolean drivingForwardAuto1 = false;
 	private boolean turningClockwiseAuto1 = false;
+	private boolean liftFinished = false;
+	private long autoLiftTimerVal;
 	
 	private Relay spinnyLight = new Relay(0, Relay.Direction.kForward);
 	
@@ -63,6 +65,7 @@ public class Robot extends IterativeRobot {
 	private long armsSearchingTime = 0;
 	private boolean boxGrabberClosing = false;
 	private long boxGrabberClosingTime = 0;
+	
 	
 	private DigitalInput boxGrabberSensor = new DigitalInput(4);
 	
@@ -96,6 +99,7 @@ public class Robot extends IterativeRobot {
 	private static final int RIGHT_DRIVE_AXIS = 5;
 	private static final int LIFTER_DOWN_AXIS = 6;
 	private static final int LIFTER_UP_AXIS = 7;
+	private static final int PUSH_OUT_BOX = 0;
 	
 	/**
 	 * This function is run when the robot is first started up and should be
@@ -136,6 +140,8 @@ public class Robot extends IterativeRobot {
 		resetEncoders();
 		drivingForwardAuto1 = true;
 		turningClockwiseAuto1 = true;
+		liftFinished = false;
+		autoLiftTimerVal = System.currentTimeMillis();
 	}
 
 	/**
@@ -144,16 +150,26 @@ public class Robot extends IterativeRobot {
 	@Override
 	public void autonomousPeriodic() {
 		if(drivingForwardAuto1) {
-			drivingForwardAuto1 = driveForwardDistance(24, 0.7);
+			drivingForwardAuto1 = driveForwardDistance(48, 0.7);
 			if(!drivingForwardAuto1) {
 				resetEncoders();
 			}
 		}
-		else if(turningClockwiseAuto1) {
+		/*else if(turningClockwiseAuto1) {
 			turningClockwiseAuto1 = turnDegreesOnDime(-90, 0.8);
 			if(!turningClockwiseAuto1) {
 				resetEncoders();
 			}
+		}*/
+		else if (liftFinished) {
+			//stop driving
+			rearLeft.set(0);
+			frontLeft.set(0);
+			rearRight.set(0);
+			frontRight.set(0);
+			//push out box
+			boxHolder.set(DoubleSolenoid.Value.kForward);
+			boxPusher.set(DoubleSolenoid.Value.kForward);
 		}
 		else {
 			rearLeft.set(0);
@@ -161,7 +177,17 @@ public class Robot extends IterativeRobot {
 			rearRight.set(0);
 			frontRight.set(0);
 		}
-			
+		if(!liftFinished) {
+			if(System.currentTimeMillis() - autoLiftTimerVal > 3000) {
+				liftFinished = true;
+			}
+			boxLifter1.set(1);
+			boxLifter2.set(-1);
+		}
+		else {
+			boxLifter1.set(0);
+			boxLifter2.set(0);
+		}
 	}
 
 	/**
@@ -200,6 +226,8 @@ public class Robot extends IterativeRobot {
 		if(gamepad.getRawButton(BOX_INTAKE_BUTTON)) {
 			//open arms
 			boxGrabber.set(DoubleSolenoid.Value.kForward);
+			//Open box holder
+			boxHolder.set(DoubleSolenoid.Value.kForward);
 			//turn on rollers
 			leftIntake.set(-0.5);
 			rightIntake.set(0.5);
@@ -213,6 +241,8 @@ public class Robot extends IterativeRobot {
 			if(boxGrabberSensor.get() || gamepad.getRawButton(BOX_INTAKE_FORCE_CLOSE_ARMS_BUTTON)) {
 				//close arms
 				boxGrabber.set(DoubleSolenoid.Value.kReverse);
+				//open box Holder
+				boxHolder.set(DoubleSolenoid.Value.kForward);
 				//leave rollers on
 				//set state to intaking box
 				armsSearching = false;
@@ -226,6 +256,8 @@ public class Robot extends IterativeRobot {
 			leftIntake.set(0);
 			rightIntake.set(0);
 			boxGrabberClosing = false;
+			//close box holder
+			boxHolder.set(DoubleSolenoid.Value.kReverse);
 		}
 		
 		//Lifter Controlling Code
@@ -233,51 +265,16 @@ public class Robot extends IterativeRobot {
 		boxLifter1.set(gamepad.getRawAxis(LIFTER_UP_AXIS)-gamepad.getRawAxis(LIFTER_DOWN_AXIS));
 		boxLifter2.set(-(gamepad.getRawAxis(LIFTER_UP_AXIS)-gamepad.getRawAxis(LIFTER_DOWN_AXIS)));
 		
-		 //Auto Firing section
-		/*boolean sensorTripped = triggerSensor.get();
-		 * 
-		System.out.println("potatoes:");
-		System.out.println(sensorTripped);
-		System.out.println(triggerSensor.get());*/
-		
-		/*double gamepadRightJoystick = shooterStick.getRawAxis(5);
-		double gamepadLeftTrigger = shooterStick.getRawAxis(2); 
-		double gamepadRightTrigger = shooterStick.getRawAxis(3);
-		double shooterSpeed = (1 - rightStick.getRawAxis(2)) + 0.1;
-		double timeSinceStart = timer.get();
-		
-		
-		shooterAngle.set(gamepadRightJoystick*0.5);
-		
-		leftShooterWheel.set(gamepadLeftTrigger);
-		rightShooterWheel.set(-gamepadRightTrigger);
-
-		
-
-		if ((gamepadLeftTrigger > 0.8) && (gamepadRightTrigger > 0.8)) {//(sensorTripped) {
-			lights.set(0);
-
-			if (piston.get() == Value.kForward) {
-				lights.set(1);
-			} else {
-				lights.set(0);
-			}
-
-
-			if (triggerSensor.get()) {
-				if (piston.get() == Value.kReverse) {
-					piston.set(DoubleSolenoid.Value.kForward);
-				} else {
-					piston.set(DoubleSolenoid.Value.kReverse);
-				}
-			} else {
-				piston.set(DoubleSolenoid.Value.kReverse);
-			}
-		} else {
-			piston.set(DoubleSolenoid.Value.kReverse);
-			lights.set(Math.abs(Math.sin(timeSinceStart/30*(180/Math.PI))));
+		//shooting out box
+		if(gamepad.getRawButton(PUSH_OUT_BOX)) {
+			//push out push and open box holder
+			boxHolder.set(DoubleSolenoid.Value.kForward);
+			boxPusher.set(DoubleSolenoid.Value.kForward);
 		}
-		*/
+		else {
+			//bring in box pusher, keep holders open
+			boxPusher.set(DoubleSolenoid.Value.kReverse);
+		}
 		
 	}
 
