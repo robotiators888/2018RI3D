@@ -20,6 +20,7 @@ import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.DoubleSolenoid;
 import edu.wpi.first.wpilibj.Encoder;
+import edu.wpi.first.wpilibj.Relay;
 
 /**
  * The VM is configured to automatically run this class, and to call the
@@ -32,21 +33,41 @@ public class Robot extends IterativeRobot {
 	private static final String kDefaultAuto = "Default";
 	private static final String kCustomAuto = "My Auto";
 	private String m_autoSelected;
-	private SendableChooser<String> m_chooser = new SendableChooser<>();
+	private SendableChooser<String> m_chooser = new SendableChooser<>(); 
 
-	Victor rearLeft = new Victor(7);
-	Victor rearRight = new Victor(6);
-	Victor frontLeft = new Victor(9);
-	Victor frontRight = new Victor(8);
+	private Victor rearLeft = new Victor(7); //test bot is 7, real 0
+	private Victor rearRight = new Victor(6); //test bot is 6, real 2
+	private Victor frontLeft = new Victor(9); //test bot is 9, real 1
+	private Victor frontRight = new Victor(8); //test bot is 8, real 3
 	
-	Joystick leftStick = new Joystick(0); // set to ID 1 in DriverStation
-	Joystick rightStick = new Joystick(1); // set to ID 2 in DriverStation
+	private Joystick gamepad = new Joystick(2);
 	
-	Encoder leftEncoder = new Encoder(0, 1, true, Encoder.EncodingType.k4X);
+	private Encoder leftEncoder = new Encoder(2, 3, true, Encoder.EncodingType.k4X);
 
-	Encoder rightEncoder = new Encoder(2, 3, false, Encoder.EncodingType.k4X);
+	private Encoder rightEncoder = new Encoder(0, 1, false, Encoder.EncodingType.k4X);
 
+	private boolean drivingForwardAuto1 = false;
+	private boolean turningClockwiseAuto1 = false;
 	
+	private Relay spinnyLight = new Relay(0, Relay.Direction.kForward);
+	
+	private Compressor mainCompressor = new Compressor(1);
+	private DoubleSolenoid boxGrabber = new DoubleSolenoid(0, 1);
+	private DoubleSolenoid boxHolder = new DoubleSolenoid(2,3);
+	private DoubleSolenoid boxPusher = new DoubleSolenoid(4,5);
+	
+	private Victor rightIntake = new Victor(4);
+	private Victor leftIntake = new Victor(5);
+	
+	private boolean armsSearching = false;
+	private long armsSearchingTime = 0;
+	private boolean boxGrabberClosing = false;
+	private long boxGrabberClosingTime = 0;
+	
+	private DigitalInput boxGrabberSensor = new DigitalInput(4);
+	
+	private Victor boxLifter1 = new Victor(6);
+	private Victor boxLifter2 = new Victor(7);
 	
 	//DigitalInput triggerSensor = new DigitalInput(1); 
 	
@@ -58,13 +79,23 @@ public class Robot extends IterativeRobot {
 
 	Victor lights = new Victor(2);
 
-	Joystick shooterStick = new Joystick(2);
+	
 
-	Compressor mainCompressor = new Compressor(1);
 	DoubleSolenoid piston = new DoubleSolenoid(0, 1);
 
 	Timer timer = new Timer();*/
 	//Timer shootTimer = new Timer();
+	
+	private static final double DEGREES_PER_INCH = 3.943044906900329;
+	private static final double INCHES_PER_COUNT = 0.0784313725490196;
+	
+	//Key Mappings
+	private static final int BOX_INTAKE_BUTTON = 3;
+	private static final int BOX_INTAKE_FORCE_CLOSE_ARMS_BUTTON = 6;
+	private static final int LEFT_DRIVE_AXIS = 1;
+	private static final int RIGHT_DRIVE_AXIS = 5;
+	private static final int LIFTER_DOWN_AXIS = 6;
+	private static final int LIFTER_UP_AXIS = 7;
 	
 	/**
 	 * This function is run when the robot is first started up and should be
@@ -75,20 +106,18 @@ public class Robot extends IterativeRobot {
 		m_chooser.addDefault("Default Auto", kDefaultAuto);
 		m_chooser.addObject("My Auto", kCustomAuto);
 		SmartDashboard.putData("Auto choices", m_chooser);
-		
-		
-		
+				
 		leftEncoder.setMaxPeriod(.1);
 		leftEncoder.setMinRate(10);
 		leftEncoder.setReverseDirection(false);
 		leftEncoder.setSamplesToAverage(7);
-		leftEncoder.setDistancePerPulse(0.0784313725490196);
+		leftEncoder.setDistancePerPulse(INCHES_PER_COUNT);
 		
 		rightEncoder.setMaxPeriod(.1);
 		rightEncoder.setMinRate(10);
 		rightEncoder.setReverseDirection(true);
 		rightEncoder.setSamplesToAverage(7);
-		rightEncoder.setDistancePerPulse(0.0784313725490196);
+		rightEncoder.setDistancePerPulse(INCHES_PER_COUNT);
 	}
 
 	/**
@@ -104,8 +133,9 @@ public class Robot extends IterativeRobot {
 	 */
 	@Override
 	public void autonomousInit() {
-		leftEncoder.reset();
-		rightEncoder.reset();
+		resetEncoders();
+		drivingForwardAuto1 = true;
+		turningClockwiseAuto1 = true;
 	}
 
 	/**
@@ -113,24 +143,25 @@ public class Robot extends IterativeRobot {
 	 */
 	@Override
 	public void autonomousPeriodic() {
-		if(leftEncoder.getDistance() < 24) {
-			//left side forward is positive
-			rearLeft.set(0.5);
-			frontLeft.set(0.5);
+		if(drivingForwardAuto1) {
+			drivingForwardAuto1 = driveForwardDistance(24, 0.7);
+			if(!drivingForwardAuto1) {
+				resetEncoders();
+			}
+		}
+		else if(turningClockwiseAuto1) {
+			turningClockwiseAuto1 = turnDegreesOnDime(-90, 0.8);
+			if(!turningClockwiseAuto1) {
+				resetEncoders();
+			}
 		}
 		else {
 			rearLeft.set(0);
 			frontLeft.set(0);
-		}
-		if(rightEncoder.getDistance() < 24) {
-			//right side forward is negative
-			rearRight.set(-0.5);
-			frontRight.set(-0.5);
-		}
-		else {
 			rearRight.set(0);
 			frontRight.set(0);
 		}
+			
 	}
 
 	/**
@@ -143,15 +174,15 @@ public class Robot extends IterativeRobot {
 		//The left side is negated because it needs to be that way to get 
 		//the motors to spin in the forward direction when the joystick is pushed forward
 		//Left side forward is positive
-		double leftStickValue = -leftStick.getRawAxis(1);
+		double leftStickValue = -gamepad.getRawAxis(LEFT_DRIVE_AXIS);
 		//right side forward is negative
-		double rightStickValue = rightStick.getRawAxis(1);
+		double rightStickValue = gamepad.getRawAxis(RIGHT_DRIVE_AXIS);
 		
-		
+		/*
 		if (!leftStick.getRawButton(1) && !rightStick.getRawButton(1)) {
 			leftStickValue *= 0.7;
 			rightStickValue *= 0.7;
-		}
+		}*/
 
 		rearLeft.set(leftStickValue);
 		frontLeft.set(leftStickValue);
@@ -162,6 +193,45 @@ public class Robot extends IterativeRobot {
 		System.out.println(leftEncoder.getDistance());
 		System.out.println(rightEncoder.getDistance());
 		
+		spinnyLight.set(Relay.Value.kForward);
+		
+		
+		//Arm Controlling Code
+		if(gamepad.getRawButton(BOX_INTAKE_BUTTON)) {
+			//open arms
+			boxGrabber.set(DoubleSolenoid.Value.kForward);
+			//turn on rollers
+			leftIntake.set(-0.5);
+			rightIntake.set(0.5);
+			//set state to searching
+			armsSearching = true;
+			boxGrabberClosing = false;
+			armsSearchingTime = System.currentTimeMillis();
+		}
+		
+		if((armsSearching && (System.currentTimeMillis()-armsSearchingTime > 500)) || gamepad.getRawButton(BOX_INTAKE_FORCE_CLOSE_ARMS_BUTTON)) {
+			if(boxGrabberSensor.get() || gamepad.getRawButton(BOX_INTAKE_FORCE_CLOSE_ARMS_BUTTON)) {
+				//close arms
+				boxGrabber.set(DoubleSolenoid.Value.kReverse);
+				//leave rollers on
+				//set state to intaking box
+				armsSearching = false;
+				boxGrabberClosing = true;
+				boxGrabberClosingTime = System.currentTimeMillis();
+			}
+		}
+		
+		if(boxGrabberClosing && (System.currentTimeMillis()-boxGrabberClosingTime) > 1000) {
+			//turn off rollers
+			leftIntake.set(0);
+			rightIntake.set(0);
+			boxGrabberClosing = false;
+		}
+		
+		//Lifter Controlling Code
+		//the two motors spin opposite directions
+		boxLifter1.set(gamepad.getRawAxis(LIFTER_UP_AXIS)-gamepad.getRawAxis(LIFTER_DOWN_AXIS));
+		boxLifter2.set(-(gamepad.getRawAxis(LIFTER_UP_AXIS)-gamepad.getRawAxis(LIFTER_DOWN_AXIS)));
 		
 		 //Auto Firing section
 		/*boolean sensorTripped = triggerSensor.get();
@@ -171,7 +241,7 @@ public class Robot extends IterativeRobot {
 		System.out.println(triggerSensor.get());*/
 		
 		/*double gamepadRightJoystick = shooterStick.getRawAxis(5);
-		double gamepadLeftTrigger = shooterStick.getRawAxis(2);
+		double gamepadLeftTrigger = shooterStick.getRawAxis(2); 
 		double gamepadRightTrigger = shooterStick.getRawAxis(3);
 		double shooterSpeed = (1 - rightStick.getRawAxis(2)) + 0.1;
 		double timeSinceStart = timer.get();
@@ -216,5 +286,96 @@ public class Robot extends IterativeRobot {
 	 */
 	@Override
 	public void testPeriodic() {
+	}
+	
+	/**
+	 * This function resets the drive encoders.
+	 * Call this function before every encoder based function
+	 */
+	private void resetEncoders() {
+		leftEncoder.reset();
+		rightEncoder.reset();
+	}
+	
+	/**
+	 * This function drives forward a specified distance at a specified speed.
+	 * It can be used to drive backwards by using a negative distance with a negative speed.
+	 * 
+	 * Make sure to call resetEncoders() before running this function.
+	 * 
+	 * WARNING: WILL ERROR IF SPEED IS NOT BETWEEN 0 AND 1
+	 * @param distanceToDrive
+	 * @param speed
+	 * @return
+	 */
+	private boolean driveForwardDistance(double distanceToDrive, double speed) {
+		if(speed > 1 || speed < 0) {
+			throw new IllegalArgumentException("The speed should be a number between 0 and 1");
+		}
+		//If we are driving Forward, the distance is positive. Driving forward will then be a 1.
+		//If we are driving Backwards, the distance is negative. Driving forward will then be a -1.
+		int drivingForward = (int) (distanceToDrive/Math.abs(distanceToDrive));
+		boolean leftSideFinished = Math.abs(leftEncoder.getDistance()) >= Math.abs(distanceToDrive);
+		boolean rightSideFinished = Math.abs(rightEncoder.getDistance()) >= Math.abs(distanceToDrive);
+		if(!leftSideFinished) {
+			//left side forward is positive
+			rearLeft.set(speed*drivingForward);
+			frontLeft.set(speed*drivingForward);
+		}
+		else {
+			//we made it to this distance, turn off motors
+			rearLeft.set(0);
+			frontLeft.set(0);
+		}
+		if(!rightSideFinished) {
+			//right side forward is negative
+			rearRight.set(-speed*drivingForward);
+			frontRight.set(-speed*drivingForward);
+		}
+		else {
+			//we made it to this distance, turn off motors
+			rearRight.set(0);
+			frontRight.set(0);
+		}
+		//Return true if running, return false if finished
+		return !(leftSideFinished && rightSideFinished);
+	}
+	
+	private boolean turnDegreesOnDime(double angle, double speed) {
+		if(speed > 1 || speed < 0) {
+			throw new IllegalArgumentException("The speed should be a number between 0 and 1");
+		}
+		int spinClockwise = (int) (angle/Math.abs(angle));
+		double leftDegreesRotated = DEGREES_PER_INCH*leftEncoder.getDistance();
+		double rightDegreesRotated = DEGREES_PER_INCH*rightEncoder.getDistance();
+		boolean leftSideFinished = Math.abs(leftDegreesRotated) >= Math.abs(angle);
+		boolean rightSideFinished = Math.abs(rightDegreesRotated) >= Math.abs(angle);
+		
+		if(!leftSideFinished) {
+			System.out.println("Left:");
+			System.out.println(leftDegreesRotated);
+			System.out.println(leftEncoder.getDistance());
+			rearLeft.set(speed*spinClockwise);
+			frontLeft.set(speed*spinClockwise);
+		} 
+		else {
+			//we made it to this angle, turn off motors
+			rearLeft.set(0); 
+			frontLeft.set(0);
+		}
+		if(!rightSideFinished) {
+			System.out.println("Right:");
+			System.out.println(rightDegreesRotated);
+			System.out.println(rightEncoder.getDistance());
+			rearRight.set(speed*spinClockwise);
+			frontRight.set(speed*spinClockwise);
+		}
+		else {
+			//we made it to this angle, turn off motors
+			rearRight.set(0);
+			frontRight.set(0);
+		}
+		
+		return !(leftSideFinished && rightSideFinished);
 	}
 }
